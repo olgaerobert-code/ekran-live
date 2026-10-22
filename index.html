@@ -68,6 +68,17 @@ button,textarea,input{font:inherit;color:inherit}
 .stage .ln.kv{display:grid;grid-template-columns:auto 1fr;column-gap:.5em}
 .stage .ln .k{color:var(--stage-muted);font-weight:500}
 .stage .ln.head{color:var(--stage-accent);font-family:var(--f-display);font-weight:800;margin-top:.25em}
+.stage .pairs{display:grid;column-gap:.55em;row-gap:.1em;align-items:baseline;font-weight:700;line-height:1.15}
+.stage .pairs .pk{overflow-wrap:anywhere}
+.stage .pairs .pv{color:var(--stage-accent);font-family:var(--f-display);font-weight:800;white-space:nowrap;padding-right:.9em}
+.stage .mx{display:grid;column-gap:.7em;row-gap:.12em;align-items:baseline;line-height:1.15;justify-content:start}
+.stage .mx .mh{color:var(--stage-muted);font-weight:700;font-size:.8em;text-align:center}
+.stage .mx .mk{font-weight:700;padding-right:.3em}
+.stage .mx .mv{color:var(--stage-accent);font-family:var(--f-display);font-weight:800;text-align:center;white-space:nowrap}
+.opts{display:grid;gap:8px;font-size:.92rem}
+.opts label{display:flex;gap:8px;align-items:flex-start;cursor:pointer}
+.opts input{margin-top:.25em;width:1.05em;height:1.05em;accent-color:var(--accent)}
+.found{font-size:.88rem;color:var(--ok);margin:0;white-space:pre-line}
 .stage .empty{margin:auto;text-align:center;color:var(--stage-muted);font-weight:500}
 .stage .empty b{display:block;font-family:var(--f-display);color:var(--stage-fg);font-size:1.6em;margin-bottom:.2em}
 
@@ -107,13 +118,81 @@ function stageHTML(t){
   if(!t||(!t.tytul&&!t.tresc)) return '<div class="empty"><b>Ekran gotowy</b>Czekam na tekst z panelu</div>';
   let h='<div class="fit">';
   if(t.tytul) h+='<div class="ttl">'+esc(t.tytul)+'</div>';
+  let pary=[];
+  const flush=()=>{ if(!pary.length) return;
+    h+='<div class="pairs" style="grid-template-columns:'+(pary.length>8?'auto auto auto auto':'auto auto')+'">'
+      +pary.map(p=>'<span class="pk">'+esc(p[0])+'</span><span class="pv">'+esc(p[1])+'</span>').join('')+'</div>';
+    pary=[]; };
+  let tab=[];
+  const flushTab=()=>{ if(!tab.length) return;
+    const n=Math.max(...tab.map(r=>r.length));
+    h+='<div class="mx" style="grid-template-columns:repeat('+n+',auto)">'
+      +tab.map((r,ri)=>r.concat(Array(n-r.length).fill("")).map((c,ci)=>'<span class="'+(ri===0?'mh':ci===0?'mk':'mv')+'">'+esc(c)+'</span>').join('')).join('')+'</div>';
+    tab=[]; };
   String(t.tresc||"").replace(/\r/g,"").split("\n").forEach(raw=>{
     const l=raw.trim(); if(!l) return; let m;
+    if(l.startsWith("|")){ flush(); tab.push(l.slice(1).split("|").map(s=>s.trim())); return; }
+    flushTab();
+    if((m=l.match(/^(.+?)\s+–\s+(.+)$/))){ pary.push([m[1],m[2]]); return; }
+    flush();
     if(/^[^:]{1,14}:$/.test(l)) h+='<div class="ln head">'+esc(l.slice(0,-1))+'</div>';
     else if((m=l.match(/^([^:]{1,28}):\s*(.+)$/))) h+='<div class="ln kv"><span class="k">'+esc(m[1])+':</span><span>'+esc(m[2])+'</span></div>';
     else h+='<div class="ln">'+esc(l)+'</div>';
   });
+  flush(); flushTab();
   return h+'</div>';
+}
+/* ---- wyciąganie „kolor – kod” z opisu produktu (linie „Nazwa KOLOR/ROZMIAR : XA2397 C”) ---- */
+/* wymiary (bloki „Wymiary:” i „Warianty dołu ubioru:”, po jednej linii na rozmiar) i skład */
+function wymSklad(txt){
+  const lines=String(txt||"").replace(/\r/g,"").split("\n").map(s=>s.trim()).filter(Boolean);
+  let sec=null, pre="", cur=null; const wym=[], skl=[];
+  for(const l of lines){
+    if(/^wymiary\s*:?$/i.test(l)){sec="w";pre="";cur=null;continue;}
+    if(/^warianty do[łl]u/i.test(l)){sec="w";pre="Dół ";cur=null;continue;}
+    let m=l.match(/^sk[łl]ad\s*:\s*(.*)$/i);
+    if(m){sec="s"; if(m[1]) skl.push(m[1]); continue;}
+    if(/✍|zam[óo]w w komentarzu/i.test(l)){sec=null;continue;}
+    if(sec==="w"){
+      if((m=l.match(/^\[(.+)\]$/))){const r=m[1].trim();cur={label:pre+(/^uniwersalny$/i.test(r)?"Uniwersalny":r),parts:[]};wym.push(cur);}
+      else if(cur&&(m=l.match(/^([^:]+):\s*(.+)$/))) cur.parts.push(m[1].trim()+" "+m[2].trim());
+    } else if(sec==="s") skl.push(l);
+  }
+  return {wymiary:wym.filter(c=>c.parts.length).map(c=>c.label+": "+c.parts.join(" · ")), sklad:skl.join(", ")};
+}
+const ROZMIAR=/^(uniwersalny|uni|one ?size|xxs|xs|s|m|l|xl|xxl|xxxl|[2-6]xl|\d{2}(-\d{2})?)$/i;
+function wyciagnij(txt){
+  const lines=String(txt||"").replace(/\r/g,"").split("\n").map(s=>s.trim()).filter(Boolean);
+  const nazwa=lines[0]||"";
+  const cena=((String(txt).match(/Cena:\s*([^\n]+)/i)||[])[1]||"").trim();
+  const low=s=>s.toLocaleLowerCase("pl");
+  const ladny=s=>{s=low(s).replace(/\s+/g," ").trim();return s.charAt(0).toLocaleUpperCase("pl")+s.slice(1);};
+  const pary=[];
+  for(const l of lines){
+    const m=l.match(/^(.+?)\s*:\s*([A-ZĄĆĘŁŃÓŚŹŻ]{1,4}\d{1,6}[A-Z0-9]*(?:\s+[A-Z0-9]{1,5})?)\s*$/);
+    if(!m) continue;
+    let lewa=m[1].trim();
+    if(nazwa && low(lewa).startsWith(low(nazwa))) lewa=lewa.slice(nazwa.length).trim();
+    /* części rozdzielone „/”: rozmiar rozpoznany po wzorcu, reszta to kolor (działa dla KOLOR/ROZMIAR i ROZMIAR/KOLOR) */
+    const czesci=lewa.split("/").map(s=>s.trim()).filter(Boolean);
+    const rozm=czesci.filter(c=>ROZMIAR.test(c)), kol=czesci.filter(c=>!ROZMIAR.test(c));
+    const kolor=kol.length?ladny(kol.join(" ")):(czesci.length?"":lewa);
+    pary.push({kolor,rozmiar:rozm.join("/").toUpperCase(),kod:m[2].replace(/\s+/g," ")});
+  }
+  if(!pary.length) return {nazwa,cena,linie:[],ile:0};
+  const kolory=[...new Set(pary.map(p=>p.kolor))], rozmiary=[...new Set(pary.map(p=>p.rozmiar))];
+  /* wiele kolorów i wiele rozmiarów: tabela (wiersz = kolor, kolumna = rozmiar), wspólny początek kodu nad tabelą */
+  if(kolory.length>1 && rozmiary.length>1){
+    const pref=pary.every(p=>p.kod.includes(" ")&&p.kod.split(" ")[0]===pary[0].kod.split(" ")[0])?pary[0].kod.split(" ")[0]:"";
+    const kom=k=>pref?k.slice(pref.length).trim():k;
+    const linie=[];
+    if(pref) linie.push("Kod: "+pref+" + kod z tabeli");
+    linie.push("|"+["",...rozmiary].join("|"));
+    kolory.forEach(k=>linie.push("|"+[k,...rozmiary.map(r=>{const p=pary.find(x=>x.kolor===k&&x.rozmiar===r);return p?kom(p.kod):"—";})].join("|")));
+    return {nazwa,cena,linie,ile:pary.length};
+  }
+  const linie=pary.map(p=>(kolory.length>1||!p.rozmiar?(p.kolor||p.rozmiar):p.rozmiar)+" – "+p.kod);
+  return {nazwa,cena,linie,ile:pary.length};
 }
 function fit(stage){
   const box=stage.querySelector(".fit"); if(!box){stage.style.fontSize=Math.max(14,stage.clientHeight/12)+"px";return;}
@@ -217,7 +296,14 @@ function startPanel(topic){
       <div class="field"><label class="lbl" for="tytul">Nagłówek (np. kod i nazwa)</label>
         <input id="tytul" type="text" autocomplete="off" placeholder="A1741 · Kurtka jeansowa · 149 zł"></div>
       <div class="field"><label class="lbl" for="tresc">Treść — wklej wymiary, skład, cokolwiek</label>
-        <textarea id="tresc" placeholder="M:&#10;Biust: 116&#10;Biodra: 106&#10;L:&#10;Biust: 120"></textarea></div>
+        <textarea id="tresc" placeholder="Wklej cały opis z kodami albo dowolny tekst"></textarea></div>
+      <div class="opts">
+        <label><input type="checkbox" id="tylko" checked> <span>Gdy wklejony jest opis z kodami — pokaż tylko <b>kolor – kod</b></span></label>
+        <label><input type="checkbox" id="znazwa"> <span>Dodaj nazwę produktu i cenę jako nagłówek</span></label>
+        <label><input type="checkbox" id="zwym"> <span>Dodaj wymiary (jedna linia na rozmiar)</span></label>
+        <label><input type="checkbox" id="zskl" checked> <span>Dodaj skład</span></label>
+      </div>
+      <p class="found" id="found"></p>
       <div class="row">
         <button class="btn primary" id="send" type="button">Pokaż na tablecie</button>
         <button class="btn" id="clear" type="button">Wyczyść ekran</button>
@@ -285,7 +371,32 @@ function startPanel(topic){
       say(e&&e.code==="rate"?"Za dużo wysyłek naraz. Odczekaj kilka sekund.":"Nie udało się wysłać. Sprawdź internet i spróbuj jeszcze raz.","err");
     }finally{busy=false;$("send").disabled=false;}
   }
-  $("send").addEventListener("click",()=>{const t={tytul:$("tytul").value.trim(),tresc:$("tresc").value.trim()}; if(!t.tytul&&!t.tresc){say("Wpisz albo wklej tekst.","err");return;} send(t);});
+  /* opcje wyciągania kodów, zapamiętane na tym urządzeniu */
+  const OPC=["tylko","znazwa","zwym","zskl"];
+  try{const o=JSON.parse(localStorage.getItem("ekran-opcje")||"null"); if(o) OPC.forEach(k=>{ if(k in o) $(k).checked=!!o[k]; });}catch(e){}
+  const saveOpts=()=>{const o={};OPC.forEach(k=>o[k]=$(k).checked);try{localStorage.setItem("ekran-opcje",JSON.stringify(o));}catch(e){}};
+  function doWyslania(){
+    const tytul=$("tytul").value.trim(), tresc=$("tresc").value.trim();
+    if($("tylko").checked){
+      const w=wyciagnij(tresc);
+      if(w.linie.length){
+        const nag=tytul||($("znazwa").checked?[w.nazwa,w.cena].filter(Boolean).join(" · "):"");
+        const d=wymSklad(tresc), extra=[];
+        if($("zwym").checked) extra.push(...d.wymiary);
+        if($("zskl").checked&&d.sklad) extra.push("Skład: "+d.sklad);
+        return {tytul:nag,tresc:w.linie.concat(extra).join("\n"),kody:w.ile};
+      }
+    }
+    return {tytul,tresc,kody:0};
+  }
+  function pokazWykryte(){
+    const t=doWyslania();
+    $("found").textContent=t.kody?("Wykryto "+t.kody+" "+(t.kody===1?"kod":t.kody<5?"kody":"kodów")+" — na tablecie pokaże się:\n"+(t.tytul?t.tytul+"\n":"")+t.tresc):"";
+  }
+  $("tresc").addEventListener("input",pokazWykryte); $("tytul").addEventListener("input",pokazWykryte);
+  OPC.forEach(k=>$(k).addEventListener("change",()=>{saveOpts();pokazWykryte();}));
+  pokazWykryte();
+  $("send").addEventListener("click",()=>{const t=doWyslania(); if(!t.tytul&&!t.tresc){say("Wpisz albo wklej tekst.","err");return;} send({tytul:t.tytul,tresc:t.tresc});});
   $("clear").addEventListener("click",()=>send({tytul:"",tresc:""}));
   $("reset").addEventListener("click",()=>{$("tytul").value="";$("tresc").value="";saveDraft();$("tytul").focus();});
   document.addEventListener("keydown",e=>{if(e.key==="Enter"&&(e.ctrlKey||e.metaKey)){e.preventDefault();$("send").click();}});
