@@ -74,6 +74,8 @@ button,textarea,input{font:inherit;color:inherit}
 body.mode-screen{background:var(--stage)}
 .screen{position:fixed;inset:0}
 .screen .stage{padding:max(4%,env(safe-area-inset-top,0px)) 5% 4%}
+/* pełny ekran Safari: systemowy przycisk X w lewym górnym rogu, więc treść zaczyna się niżej */
+body.fs .screen .stage{padding-top:max(84px,9%)}
 .tap{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);
   background:rgba(0,0,0,.45);color:var(--stage-fg);border:1px solid rgba(255,255,255,.25);border-radius:999px;padding:10px 18px;font-weight:700;cursor:pointer;z-index:2}
 .conn{position:fixed;top:calc(10px + env(safe-area-inset-top,0px));right:12px;width:10px;height:10px;border-radius:50%;background:#e7a33c;opacity:.9;z-index:2}
@@ -193,7 +195,14 @@ function startScreen(topic){
     try{ if(el.requestFullscreen) await el.requestFullscreen(); else if(el.webkitRequestFullscreen) el.webkitRequestFullscreen(); }catch(e){}
     tap.hidden=true; keepAwake(); setTimeout(()=>fit(st),300);
   });
-  document.addEventListener("fullscreenchange",()=>{ if(!document.fullscreenElement && canFs && !standalone) tap.hidden=false; setTimeout(()=>fit(st),200); });
+  const onFs=()=>{
+    const on=!!(document.fullscreenElement||document.webkitFullscreenElement);
+    document.body.classList.toggle("fs",on);
+    if(!on && canFs && !standalone) tap.hidden=false;
+    setTimeout(()=>fit(st),200);
+  };
+  document.addEventListener("fullscreenchange",onFs);
+  document.addEventListener("webkitfullscreenchange",onFs);
   subscribe(topic,t=>{ cur=t; paint(st,t); try{localStorage.setItem("ekran-ostatni",JSON.stringify(t));}catch(e){} },
     s=>{ conn.className="conn"+(s==="ok"?" ok":""); conn.title=s==="ok"?"Połączono":"Łączenie…"; });
 }
