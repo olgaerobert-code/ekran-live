@@ -261,7 +261,8 @@ function startPanel(topic){
     const body={tytul:t.tytul||"",tresc:t.tresc||"",ts:Date.now()};
     if(new TextEncoder().encode(JSON.stringify(body)).length>3900){say("Tekst jest za długi. Skróć go.","err");busy=false;$("send").disabled=false;return;}
     try{
-      const r=await fetch(NTFY+"/"+topic,{method:"POST",body:JSON.stringify(body)});
+      /* publikacja w formacie JSON: treść zawsze jako tekst, nigdy jako załącznik */
+      const r=await fetch(NTFY+"/",{method:"POST",body:JSON.stringify({topic:topic,message:JSON.stringify(body)})});
       if(r.status===429) throw {code:"rate"};
       if(!r.ok) throw {code:"http"};
       if(body.tytul||body.tresc){
