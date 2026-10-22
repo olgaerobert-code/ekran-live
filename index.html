@@ -181,14 +181,10 @@ function wyciagnij(txt){
   }
   if(!pary.length) return {nazwa,cena,linie:[],ile:0};
   const kolory=[...new Set(pary.map(p=>p.kolor))], rozmiary=[...new Set(pary.map(p=>p.rozmiar))];
-  /* wiele kolorów i wiele rozmiarów: tabela (wiersz = kolor, kolumna = rozmiar), wspólny początek kodu nad tabelą */
+  /* wiele kolorów i wiele rozmiarów: tabela (wiersz = kolor, kolumna = rozmiar), w komórkach pełne kody */
   if(kolory.length>1 && rozmiary.length>1){
-    const pref=pary.every(p=>p.kod.includes(" ")&&p.kod.split(" ")[0]===pary[0].kod.split(" ")[0])?pary[0].kod.split(" ")[0]:"";
-    const kom=k=>pref?k.slice(pref.length).trim():k;
-    const linie=[];
-    if(pref) linie.push("Kod: "+pref+" + kod z tabeli");
-    linie.push("|"+["",...rozmiary].join("|"));
-    kolory.forEach(k=>linie.push("|"+[k,...rozmiary.map(r=>{const p=pary.find(x=>x.kolor===k&&x.rozmiar===r);return p?kom(p.kod):"—";})].join("|")));
+    const linie=["|"+["",...rozmiary].join("|")];
+    kolory.forEach(k=>linie.push("|"+[k,...rozmiary.map(r=>{const p=pary.find(x=>x.kolor===k&&x.rozmiar===r);return p?p.kod:"—";})].join("|")));
     return {nazwa,cena,linie,ile:pary.length};
   }
   const linie=pary.map(p=>(kolory.length>1||!p.rozmiar?(p.kolor||p.rozmiar):p.rozmiar)+" – "+p.kod);
