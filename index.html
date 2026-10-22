@@ -304,6 +304,7 @@ function startPanel(topic){
         <label><input type="checkbox" id="zskl" checked> <span>Dodaj skład</span></label>
       </div>
       <p class="found" id="found"></p>
+      <div class="prevwrap" id="przedWrap" hidden><div class="prev"><div class="stage" id="przed"></div></div></div>
       <div class="row">
         <button class="btn primary" id="send" type="button">Pokaż na tablecie</button>
         <button class="btn" id="clear" type="button">Wyczyść ekran</button>
@@ -391,7 +392,9 @@ function startPanel(topic){
   }
   function pokazWykryte(){
     const t=doWyslania();
-    $("found").textContent=t.kody?("Wykryto "+t.kody+" "+(t.kody===1?"kod":t.kody<5?"kody":"kodów")+" — na tablecie pokaże się:\n"+(t.tytul?t.tytul+"\n":"")+t.tresc):"";
+    $("found").textContent=t.kody?("Wykryto "+t.kody+" "+(t.kody===1?"kod":t.kody<5?"kody":"kodów")+". Podgląd przed wysłaniem:"):"";
+    $("przedWrap").hidden=!t.kody;
+    if(t.kody) paint($("przed"),t);
   }
   $("tresc").addEventListener("input",pokazWykryte); $("tytul").addEventListener("input",pokazWykryte);
   OPC.forEach(k=>$(k).addEventListener("change",()=>{saveOpts();pokazWykryte();}));
