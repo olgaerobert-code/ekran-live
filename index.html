@@ -111,7 +111,7 @@ async function topicFor(key){
   const d=await crypto.subtle.digest("SHA-256",new TextEncoder().encode("oer-ekran:"+key));
   return "oer-"+[...new Uint8Array(d)].slice(0,16).map(b=>b.toString(16).padStart(2,"0")).join("");
 }
-function parseMsg(m){ try{const o=JSON.parse(m); if(o&&typeof o==="object") return {tytul:String(o.tytul||""),tresc:String(o.tresc||""),ts:+o.ts||0};}catch(e){} return null; }
+function parseMsg(m){ try{const o=JSON.parse(m); if(o&&typeof o==="object") return {tytul:String(o.tytul||""),tresc:String(o.tresc||""),ts:+o.ts||0,lustro:!!o.lustro};}catch(e){} return null; }
 
 /* ---- scena ---- */
 function stageHTML(t){
@@ -255,7 +255,9 @@ function startScreen(topic){
   app.innerHTML='<div class="screen"><div class="stage" id="st"></div></div><div class="conn" id="conn" title="Połączenie"></div><button class="tap" id="tap" type="button">Dotknij, aby włączyć pełny ekran</button>';
   const st=document.getElementById("st"), tap=document.getElementById("tap"), conn=document.getElementById("conn");
   let cur=null; try{cur=JSON.parse(localStorage.getItem("ekran-ostatni")||"null");}catch(e){}
-  paint(st,cur);
+  /* lustrzane odbicie dla przedniej kamery: ustawiane z panelu, przychodzi razem z tekstem */
+  const pokaz=t=>{ paint(st,t); st.style.transform=t&&t.lustro?"scaleX(-1)":""; };
+  pokaz(cur);
   window.addEventListener("resize",()=>fit(st));
   const standalone=window.navigator.standalone||matchMedia("(display-mode: standalone)").matches;
   const canFs=!!(document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen);
@@ -278,7 +280,7 @@ function startScreen(topic){
   };
   document.addEventListener("fullscreenchange",onFs);
   document.addEventListener("webkitfullscreenchange",onFs);
-  subscribe(topic,t=>{ cur=t; paint(st,t); try{localStorage.setItem("ekran-ostatni",JSON.stringify(t));}catch(e){} },
+  subscribe(topic,t=>{ cur=t; pokaz(t); try{localStorage.setItem("ekran-ostatni",JSON.stringify(t));}catch(e){} },
     s=>{ conn.className="conn"+(s==="ok"?" ok":""); conn.title=s==="ok"?"Połączono":"Łączenie…"; });
 }
 
@@ -294,6 +296,7 @@ function startPanel(topic){
       <div class="field"><label class="lbl" for="tresc">Treść — wklej wymiary, skład, cokolwiek</label>
         <textarea id="tresc" placeholder="Wklej cały opis z kodami albo dowolny tekst"></textarea></div>
       <div class="opts">
+        <label><input type="checkbox" id="lustro" checked> <span><b>Lustrzane odbicie na tablecie</b> (transmisja z przedniej kamery)</span></label>
         <label><input type="checkbox" id="tylko" checked> <span>Gdy wklejony jest opis z kodami — pokaż tylko <b>kolor – kod</b></span></label>
         <label><input type="checkbox" id="znazwa"> <span>Dodaj nazwę produktu i cenę jako nagłówek</span></label>
         <label><input type="checkbox" id="zwym"> <span>Dodaj wymiary (jedna linia na rozmiar)</span></label>
@@ -347,10 +350,10 @@ function startPanel(topic){
   }
   renderHist();
 
-  let busy=false;
+  let busy=false, naTablecie=null;
   async function send(t){
     if(busy) return; busy=true; $("send").disabled=true;
-    const body={tytul:t.tytul||"",tresc:t.tresc||"",ts:Date.now()};
+    const body={tytul:t.tytul||"",tresc:t.tresc||"",ts:Date.now(),lustro:$("lustro").checked};
     if(new TextEncoder().encode(JSON.stringify(body)).length>3900){say("Tekst jest za długi. Skróć go.","err");busy=false;$("send").disabled=false;return;}
     try{
       /* publikacja w formacie JSON: treść zawsze jako tekst, nigdy jako załącznik */
@@ -369,7 +372,7 @@ function startPanel(topic){
     }finally{busy=false;$("send").disabled=false;}
   }
   /* opcje wyciągania kodów, zapamiętane na tym urządzeniu */
-  const OPC=["tylko","znazwa","zwym","zskl"];
+  const OPC=["lustro","tylko","znazwa","zwym","zskl"];
   try{const o=JSON.parse(localStorage.getItem("ekran-opcje")||"null"); if(o) OPC.forEach(k=>{ if(k in o) $(k).checked=!!o[k]; });}catch(e){}
   const saveOpts=()=>{const o={};OPC.forEach(k=>o[k]=$(k).checked);try{localStorage.setItem("ekran-opcje",JSON.stringify(o));}catch(e){}};
   function doWyslania(){
@@ -394,6 +397,8 @@ function startPanel(topic){
   }
   $("tresc").addEventListener("input",pokazWykryte); $("tytul").addEventListener("input",pokazWykryte);
   OPC.forEach(k=>$(k).addEventListener("change",()=>{saveOpts();pokazWykryte();}));
+  /* zmiana lustra od razu odświeża to, co jest na tablecie */
+  $("lustro").addEventListener("change",()=>{ if(naTablecie&&(naTablecie.tytul||naTablecie.tresc)) send({tytul:naTablecie.tytul,tresc:naTablecie.tresc}); });
   pokazWykryte();
   $("send").addEventListener("click",()=>{const t=doWyslania(); if(!t.tytul&&!t.tresc){say("Wpisz albo wklej tekst.","err");return;} send({tytul:t.tytul,tresc:t.tresc});});
   $("clear").addEventListener("click",()=>send({tytul:"",tresc:""}));
@@ -401,7 +406,7 @@ function startPanel(topic){
   document.addEventListener("keydown",e=>{if(e.key==="Enter"&&(e.ctrlKey||e.metaKey)){e.preventDefault();$("send").click();}});
   $("copy").addEventListener("click",async()=>{try{await navigator.clipboard.writeText(scr);say("Skopiowano link ekranu","ok");}catch(e){const r=document.createRange();r.selectNodeContents($("l1"));const s=getSelection();s.removeAllRanges();s.addRange(r);}});
 
-  subscribe(topic,t=>paint(prev,t),s=>setStatus(s==="ok"?"ok":s==="poll"?"wait":"err",s==="ok"?"Połączono":s==="poll"?"Łączenie…":"Brak połączenia"));
+  subscribe(topic,t=>{naTablecie=t;paint(prev,t);},s=>setStatus(s==="ok"?"ok":s==="poll"?"wait":"err",s==="ok"?"Połączono":s==="poll"?"Łączenie…":"Brak połączenia"));
 }
 
 if(!KEY){ startSetup(); }
