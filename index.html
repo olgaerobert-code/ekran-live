@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ekran live">
+<meta name="theme-color" content="#2a1424">
+<meta name="robots" content="noindex">
+<title>Ekran na live</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;700;800&display=swap">
+<style>
+/* Układ: #k=… → ekran (pełny poziomy kadr, autodopasowanie tekstu); #k=…&panel → panel (formularz, podgląd 16:9, historia); bez klucza → ustawienie kanału */
+:root{
+  --bg:#f6f3f5; --surface:#ffffff; --fg:#231a22; --muted:#6f6170; --line:#e4dbe2;
+  --accent:#8a2f5c; --accent-fg:#ffffff; --ok:#1d7a4f; --warn:#a35a00;
+  --stage:#2a1424; --stage-fg:#fbf3ea; --stage-muted:#d9b9a6; --stage-accent:#e7b864;
+  --f-display:"Bricolage Grotesque","Segoe UI",system-ui,sans-serif;
+  --f-body:"Manrope","Segoe UI",system-ui,sans-serif;
+  --r:12px; color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#171116; --surface:#221a21; --fg:#f2e9ef; --muted:#b3a3b1; --line:#3a2d38;
+  --accent:#d27aa6; --accent-fg:#1a0f17; --ok:#5fd19b; --warn:#f0b35a; color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font:16px/1.45 var(--f-body)}
+button,textarea,input{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+[hidden]{display:none!important}
+
+.panel{max-width:760px;margin:0 auto;padding-inline:16px;padding-block:calc(20px + env(safe-area-inset-top,0px)) 40px;display:grid;gap:18px}
+.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px}
+.top h1{font-family:var(--f-display);font-weight:800;font-size:1.6rem;margin:0;letter-spacing:-.01em}
+.status{display:inline-flex;align-items:center;gap:8px;font-size:.85rem;color:var(--muted)}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--muted)}
+.status[data-s="ok"] .dot{background:var(--ok)} .status[data-s="err"] .dot{background:var(--warn)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;display:grid;gap:12px;min-width:0}
+.lbl{font-size:.75rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.field{display:grid;gap:6px}
+#tytul,#tresc{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+#tresc{min-height:170px;resize:vertical;font-variant-numeric:tabular-nums}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:10px 16px;font-weight:700;cursor:pointer}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg);padding:12px 22px;font-size:1.05rem}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.hint{font-size:.85rem;color:var(--muted);margin:0}
+.msg{font-size:.9rem;font-weight:700;min-height:1.3em;margin:0}
+.msg.ok{color:var(--ok)} .msg.err{color:var(--warn)}
+.prevwrap{border-radius:var(--r);overflow:hidden;border:1px solid var(--line)}
+.prev{aspect-ratio:16/9;max-width:100%;position:relative}
+.hist{display:grid;gap:8px;margin:0;padding:0;list-style:none}
+.hist li{display:flex;gap:10px;align-items:center;justify-content:space-between;border:1px solid var(--line);border-radius:10px;padding:8px 10px;min-width:0}
+.hist .t{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.92rem}
+.hist .t b{margin-right:6px}
+.how{font-size:.92rem}
+.how ol{margin:0;padding-left:1.2em;display:grid;gap:6px}
+.linkbox{display:grid;gap:6px}
+.linkbox code{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;user-select:all;word-break:break-all;font-size:.85rem}
+
+.stage{background:var(--stage);color:var(--stage-fg);position:absolute;inset:0;display:flex;flex-direction:column;
+  padding:4.5% 5.5%;overflow:hidden;font-variant-numeric:tabular-nums}
+.stage .fit{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:.35em}
+.stage .ttl{font-family:var(--f-display);font-weight:800;line-height:1.02;color:var(--stage-accent);letter-spacing:-.01em;margin-bottom:.15em}
+.stage .ln{font-weight:700;line-height:1.18;white-space:pre-wrap;overflow-wrap:anywhere}
+.stage .ln.kv{display:grid;grid-template-columns:auto 1fr;column-gap:.5em}
+.stage .ln .k{color:var(--stage-muted);font-weight:500}
+.stage .ln.head{color:var(--stage-accent);font-family:var(--f-display);font-weight:800;margin-top:.25em}
+.stage .empty{margin:auto;text-align:center;color:var(--stage-muted);font-weight:500}
+.stage .empty b{display:block;font-family:var(--f-display);color:var(--stage-fg);font-size:1.6em;margin-bottom:.2em}
+
+body.mode-screen{background:var(--stage)}
+.screen{position:fixed;inset:0}
+.screen .stage{padding:max(4%,env(safe-area-inset-top,0px)) 5% 4%}
+.tap{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);
+  background:rgba(0,0,0,.45);color:var(--stage-fg);border:1px solid rgba(255,255,255,.25);border-radius:999px;padding:10px 18px;font-weight:700;cursor:pointer;z-index:2}
+.conn{position:fixed;top:calc(10px + env(safe-area-inset-top,0px));right:12px;width:10px;height:10px;border-radius:50%;background:#e7a33c;opacity:.9;z-index:2}
+.conn.ok{background:#4caf7d;opacity:.35}
+@media (prefers-reduced-motion:no-preference){.stage .fit{animation:inn .25s ease-out}}
+@keyframes inn{from{opacity:.4;transform:translateY(6px)}to{opacity:1;transform:none}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+(function(){
+const NTFY="https://ntfy.sh";
+const app=document.getElementById("app");
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const params=new URLSearchParams(location.hash.slice(1));
+const KEY=params.get("k")||"";
+const PANEL=params.has("panel");
+const base=location.origin+location.pathname;
+
+async function topicFor(key){
+  const d=await crypto.subtle.digest("SHA-256",new TextEncoder().encode("oer-ekran:"+key));
+  return "oer-"+[...new Uint8Array(d)].slice(0,16).map(b=>b.toString(16).padStart(2,"0")).join("");
+}
+function parseMsg(m){ try{const o=JSON.parse(m); if(o&&typeof o==="object") return {tytul:String(o.tytul||""),tresc:String(o.tresc||""),ts:+o.ts||0};}catch(e){} return null; }
+
+/* ---- scena ---- */
+function stageHTML(t){
+  if(!t||(!t.tytul&&!t.tresc)) return '<div class="empty"><b>Ekran gotowy</b>Czekam na tekst z panelu</div>';
+  let h='<div class="fit">';
+  if(t.tytul) h+='<div class="ttl">'+esc(t.tytul)+'</div>';
+  String(t.tresc||"").replace(/\r/g,"").split("\n").forEach(raw=>{
+    const l=raw.trim(); if(!l) return; let m;
+    if(/^[^:]{1,14}:$/.test(l)) h+='<div class="ln head">'+esc(l.slice(0,-1))+'</div>';
+    else if((m=l.match(/^([^:]{1,28}):\s*(.+)$/))) h+='<div class="ln kv"><span class="k">'+esc(m[1])+':</span><span>'+esc(m[2])+'</span></div>';
+    else h+='<div class="ln">'+esc(l)+'</div>';
+  });
+  return h+'</div>';
+}
+function fit(stage){
+  const box=stage.querySelector(".fit"); if(!box){stage.style.fontSize=Math.max(14,stage.clientHeight/12)+"px";return;}
+  const ttl=box.querySelector(".ttl"); if(ttl) ttl.style.fontSize="1.35em";
+  let lo=8, hi=Math.max(20,stage.clientHeight/2.2);
+  for(let i=0;i<18;i++){const mid=(lo+hi)/2; stage.style.fontSize=mid+"px";
+    if(box.scrollHeight>box.clientHeight+1||box.scrollWidth>box.clientWidth+1) hi=mid; else lo=mid;}
+  stage.style.fontSize=lo+"px";
+}
+function paint(stage,t){stage.innerHTML=stageHTML(t);requestAnimationFrame(()=>fit(stage));if(document.fonts)document.fonts.ready.then(()=>fit(stage));}
+
+/* ---- odbiór: ostatnia wiadomość + stałe połączenie (SSE), z zapasowym sprawdzaniem co 20 s ---- */
+function subscribe(topic,onMsg,onState){
+  let lastTs=0, es=null;
+  const take=t=>{ if(t && t.ts>=lastTs){ lastTs=t.ts; onMsg(t); } };
+  async function poll(){
+    try{
+      const r=await fetch(NTFY+"/"+topic+"/json?poll=1&since=latest",{cache:"no-store"});
+      const txt=await r.text();
+      txt.trim().split("\n").filter(Boolean).forEach(line=>{try{const ev=JSON.parse(line); if(ev.event==="message") take(parseMsg(ev.message));}catch(e){}});
+      if(!es||es.readyState!==1) onState(r.ok?"poll":"err");
+    }catch(e){ onState("err"); }
+  }
+  function open(){
+    try{ if(es) es.close(); }catch(e){}
+    es=new EventSource(NTFY+"/"+topic+"/sse");
+    es.onopen=()=>onState("ok");
+    es.onmessage=e=>{try{const ev=JSON.parse(e.data); if(ev.event==="message") take(parseMsg(ev.message));}catch(_){}};
+    es.onerror=()=>{ onState("err"); if(es.readyState===2) setTimeout(open,3000); };
+  }
+  poll(); open();
+  setInterval(()=>{ poll(); if(!es||es.readyState===2) open(); },20000);
+  document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible"){ poll(); if(!es||es.readyState!==1) open(); }});
+  window.addEventListener("online",()=>{ poll(); open(); });
+}
+
+/* ================= USTAWIENIE KANAŁU (brak klucza) ================= */
+function startSetup(){
+  let saved=""; try{saved=localStorage.getItem("ekran-klucz")||"";}catch(e){}
+  const key=saved||[...crypto.getRandomValues(new Uint8Array(12))].map(b=>b.toString(16).padStart(2,"0")).join("");
+  try{localStorage.setItem("ekran-klucz",key);}catch(e){}
+  const scr=base+"#k="+key, pan=base+"#k="+key+"&panel";
+  app.innerHTML=`<main class="panel">
+    <div class="top"><h1>Ekran na live</h1></div>
+    <section class="card how">
+      <span class="lbl">Twój prywatny kanał</span>
+      <p class="hint">Te dwa linki działają tylko razem. Nie publikuj ich — kto ma link panelu, może zmieniać ekran.</p>
+      <div class="linkbox"><b>1. Ekran — otwórz na iPadzie</b><code id="l1"></code><span><button class="btn" data-c="l1" type="button">Kopiuj</button></span></div>
+      <div class="linkbox"><b>2. Panel — otwórz na telefonie lub komputerze</b><code id="l2"></code><span><button class="btn" data-c="l2" type="button">Kopiuj</button> <a class="btn" id="go" href="#">Otwórz panel tutaj</a></span></div>
+      <p class="msg" id="msg"></p>
+    </section></main>`;
+  document.getElementById("l1").textContent=scr; document.getElementById("l2").textContent=pan;
+  document.getElementById("go").href=pan;
+  document.querySelectorAll("[data-c]").forEach(b=>b.addEventListener("click",async()=>{
+    const el=document.getElementById(b.dataset.c);
+    try{await navigator.clipboard.writeText(el.textContent);document.getElementById("msg").textContent="Skopiowano";}
+    catch(e){const r=document.createRange();r.selectNodeContents(el);const s=getSelection();s.removeAllRanges();s.addRange(r);}
+  }));
+}
+
+/* ================= EKRAN ================= */
+function startScreen(topic){
+  document.body.classList.add("mode-screen");
+  app.innerHTML='<div class="screen"><div class="stage" id="st"></div></div><div class="conn" id="conn" title="Połączenie"></div><button class="tap" id="tap" type="button">Dotknij, aby włączyć pełny ekran</button>';
+  const st=document.getElementById("st"), tap=document.getElementById("tap"), conn=document.getElementById("conn");
+  let cur=null; try{cur=JSON.parse(localStorage.getItem("ekran-ostatni")||"null");}catch(e){}
+  paint(st,cur);
+  window.addEventListener("resize",()=>fit(st));
+  const standalone=window.navigator.standalone||matchMedia("(display-mode: standalone)").matches;
+  const canFs=!!(document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen);
+  if(standalone||!canFs) tap.hidden=true;
+  let lock=null;
+  async function keepAwake(){try{if(navigator.wakeLock&&(!lock||lock.released)) lock=await navigator.wakeLock.request("screen");}catch(e){}}
+  keepAwake();
+  document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")keepAwake();});
+  document.addEventListener("pointerdown",keepAwake);
+  tap.addEventListener("click",async()=>{
+    const el=document.documentElement;
+    try{ if(el.requestFullscreen) await el.requestFullscreen(); else if(el.webkitRequestFullscreen) el.webkitRequestFullscreen(); }catch(e){}
+    tap.hidden=true; keepAwake(); setTimeout(()=>fit(st),300);
+  });
+  document.addEventListener("fullscreenchange",()=>{ if(!document.fullscreenElement && canFs && !standalone) tap.hidden=false; setTimeout(()=>fit(st),200); });
+  subscribe(topic,t=>{ cur=t; paint(st,t); try{localStorage.setItem("ekran-ostatni",JSON.stringify(t));}catch(e){} },
+    s=>{ conn.className="conn"+(s==="ok"?" ok":""); conn.title=s==="ok"?"Połączono":"Łączenie…"; });
+}
+
+/* ================= PANEL ================= */
+function startPanel(topic){
+  const scr=base+"#k="+KEY;
+  app.innerHTML=`
+  <main class="panel">
+    <div class="top"><h1>Ekran na live</h1><span class="status" id="status" data-s="wait"><span class="dot"></span><span id="statusTxt">Łączenie…</span></span></div>
+    <section class="card">
+      <div class="field"><label class="lbl" for="tytul">Nagłówek (np. kod i nazwa)</label>
+        <input id="tytul" type="text" autocomplete="off" placeholder="A1741 · Kurtka jeansowa · 149 zł"></div>
+      <div class="field"><label class="lbl" for="tresc">Treść — wklej wymiary, skład, cokolwiek</label>
+        <textarea id="tresc" placeholder="M:&#10;Biust: 116&#10;Biodra: 106&#10;L:&#10;Biust: 120"></textarea></div>
+      <div class="row">
+        <button class="btn primary" id="send" type="button">Pokaż na tablecie</button>
+        <button class="btn" id="clear" type="button">Wyczyść ekran</button>
+        <button class="btn" id="reset" type="button">Wyczyść pola</button>
+      </div>
+      <p class="msg" id="msg" role="status"></p>
+      <p class="hint">Ctrl+Enter (⌘+Enter) wysyła. Tablet zmienia się w około sekundę. Linie „Biust: 116” pokażą się jako pary, a linia „M:” jako nagłówek rozmiaru.</p>
+    </section>
+    <section class="card">
+      <span class="lbl">Teraz na tablecie</span>
+      <div class="prevwrap"><div class="prev"><div class="stage" id="prev"></div></div></div>
+    </section>
+    <section class="card">
+      <span class="lbl">Ostatnio wysłane</span>
+      <ul class="hist" id="hist"></ul>
+    </section>
+    <section class="card how">
+      <span class="lbl">Link ekranu dla iPada</span>
+      <div class="linkbox"><code id="l1"></code><span><button class="btn" id="copy" type="button">Kopiuj</button></span></div>
+      <p class="hint">Na iPadzie: Safari → Udostępnij → „Do ekranu początkowego”, potem otwieraj z ikony — pełny ekran bez pasków. W Ustawieniach wyłącz automatyczną blokadę.</p>
+    </section>
+  </main>`;
+  const $=id=>document.getElementById(id);
+  $("l1").textContent=scr;
+  const prev=$("prev"); paint(prev,null);
+  window.addEventListener("resize",()=>fit(prev));
+  const say=(t,c)=>{const m=$("msg");m.textContent=t;m.className="msg "+(c||"");};
+  const setStatus=(s,t)=>{$("status").dataset.s=s;$("statusTxt").textContent=t;};
+  try{const d=JSON.parse(localStorage.getItem("ekran-szkic")||"null"); if(d){$("tytul").value=d.tytul||"";$("tresc").value=d.tresc||"";}}catch(e){}
+  const saveDraft=()=>{try{localStorage.setItem("ekran-szkic",JSON.stringify({tytul:$("tytul").value,tresc:$("tresc").value}));}catch(e){}};
+  $("tytul").addEventListener("input",saveDraft); $("tresc").addEventListener("input",saveDraft);
+
+  let hist=[]; try{hist=JSON.parse(localStorage.getItem("ekran-historia")||"[]");}catch(e){}
+  function renderHist(){
+    const ul=$("hist"); ul.innerHTML="";
+    if(!hist.length){ul.innerHTML='<li><span class="t" style="color:var(--muted)">Tu pojawią się wysłane teksty</span></li>';return;}
+    hist.forEach(h=>{
+      const li=document.createElement("li"), t=document.createElement("span"), b=document.createElement("b"), go=document.createElement("button");
+      t.className="t"; b.textContent=h.tytul||"(bez nagłówka)"; t.appendChild(b); t.appendChild(document.createTextNode((h.tresc||"").replace(/\s*\n\s*/g," · ")));
+      go.className="btn"; go.type="button"; go.textContent="Pokaż";
+      go.addEventListener("click",()=>{$("tytul").value=h.tytul||"";$("tresc").value=h.tresc||"";saveDraft();send(h);});
+      li.appendChild(t); li.appendChild(go); ul.appendChild(li);
+    });
+  }
+  renderHist();
+
+  let busy=false;
+  async function send(t){
+    if(busy) return; busy=true; $("send").disabled=true;
+    const body={tytul:t.tytul||"",tresc:t.tresc||"",ts:Date.now()};
+    if(new TextEncoder().encode(JSON.stringify(body)).length>3900){say("Tekst jest za długi. Skróć go.","err");busy=false;$("send").disabled=false;return;}
+    try{
+      const r=await fetch(NTFY+"/"+topic,{method:"POST",body:JSON.stringify(body)});
+      if(r.status===429) throw {code:"rate"};
+      if(!r.ok) throw {code:"http"};
+      if(body.tytul||body.tresc){
+        const key=body.tytul+"\u0001"+body.tresc;
+        hist=[{tytul:body.tytul,tresc:body.tresc}].concat(hist.filter(h=>(h.tytul+"\u0001"+h.tresc)!==key)).slice(0,15);
+        try{localStorage.setItem("ekran-historia",JSON.stringify(hist));}catch(e){}
+        renderHist();
+      }
+      say(body.tytul||body.tresc?"Wysłano na tablet":"Ekran wyczyszczony","ok");
+    }catch(e){
+      say(e&&e.code==="rate"?"Za dużo wysyłek naraz. Odczekaj kilka sekund.":"Nie udało się wysłać. Sprawdź internet i spróbuj jeszcze raz.","err");
+    }finally{busy=false;$("send").disabled=false;}
+  }
+  $("send").addEventListener("click",()=>{const t={tytul:$("tytul").value.trim(),tresc:$("tresc").value.trim()}; if(!t.tytul&&!t.tresc){say("Wpisz albo wklej tekst.","err");return;} send(t);});
+  $("clear").addEventListener("click",()=>send({tytul:"",tresc:""}));
+  $("reset").addEventListener("click",()=>{$("tytul").value="";$("tresc").value="";saveDraft();$("tytul").focus();});
+  document.addEventListener("keydown",e=>{if(e.key==="Enter"&&(e.ctrlKey||e.metaKey)){e.preventDefault();$("send").click();}});
+  $("copy").addEventListener("click",async()=>{try{await navigator.clipboard.writeText(scr);say("Skopiowano link ekranu","ok");}catch(e){const r=document.createRange();r.selectNodeContents($("l1"));const s=getSelection();s.removeAllRanges();s.addRange(r);}});
+
+  subscribe(topic,t=>paint(prev,t),s=>setStatus(s==="ok"?"ok":s==="poll"?"wait":"err",s==="ok"?"Połączono":s==="poll"?"Łączenie…":"Brak połączenia"));
+}
+
+if(!KEY){ startSetup(); }
+else topicFor(KEY).then(topic=> PANEL ? startPanel(topic) : startScreen(topic));
+window.addEventListener("hashchange",()=>location.reload());
+})();
+</script>
+</body>
+</html>
